@@ -3,7 +3,7 @@
 # esp-idf NVS partition generation tool. Tool helps in generating NVS-compatible
 # partition binary, with key-value pair entries provided via a CSV file.
 #
-# SPDX-FileCopyrightText: 2018-2022 Espressif Systems (Shanghai) CO LTD
+# SPDX-FileCopyrightText: 2018-2023 Espressif Systems (Shanghai) CO LTD
 # SPDX-License-Identifier: Apache-2.0
 #
 
@@ -22,15 +22,11 @@ import textwrap
 import zlib
 from io import open
 
-try:
-    from cryptography.hazmat.backends import default_backend
-    from cryptography.hazmat.primitives import hashes, hmac
-    from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
-except ImportError:
-    print('The cryptography package is not installed.'
-          'Please refer to the Get Started section of the ESP-IDF Programming Guide for '
-          'setting up the required packages.')
-    raise
+
+from cryptography.hazmat.backends import default_backend
+from cryptography.hazmat.primitives import hashes, hmac
+from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+
 
 VERSION1_PRINT = 'V1 - Multipage Blob Support Disabled'
 VERSION2_PRINT = 'V2 - Multipage Blob Support Enabled'

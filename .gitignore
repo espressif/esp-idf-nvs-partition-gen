@@ -1,0 +1,7 @@
+esp_idf_nvs_partition_gen.egg-info/
+.eggs
+
+__pycache__
+
+.mypy_cache
+.ruff_cache

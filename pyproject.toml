@@ -1,0 +1,88 @@
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "esp_idf_nvs_partition_gen"
+authors = [
+    {name = "Espressif Systems"},
+]
+description = "ESP-IDF NVS partition generation tool"
+readme = {file = "README.md", content-type = "text/markdown"}
+requires-python = ">=3.8"
+keywords = ["espressif", "esp-idf", "nvs", "nvs-partition-gen"]
+license = {file = "LICENSE"}
+classifiers = [
+    'Development Status :: 4 - Beta',
+    'Intended Audience :: Developers',
+    'Natural Language :: English',
+    'Environment :: Console',
+    'Topic :: Software Development :: Embedded Systems',
+    'License :: OSI Approved :: Apache Software License',
+    'Programming Language :: Python :: 3.8',
+    'Programming Language :: Python :: 3.9',
+    'Programming Language :: Python :: 3.10',
+    'Programming Language :: Python :: 3.11',
+    'Programming Language :: Python :: 3.12',
+    'Operating System :: POSIX',
+    'Operating System :: Microsoft :: Windows',
+    'Operating System :: MacOS :: MacOS X',
+]
+dynamic = ['version']
+dependencies = ['cryptography']
+
+[project.urls]
+Homepage = "https://github.com/espressif/esp-idf-nvs-partition-gen"
+
+[project.optional-dependencies]
+dev = ["pre-commit"]
+
+[tool.setuptools]
+packages = ["esp_idf_nvs_partition_gen"]
+
+[tool.setuptools.dynamic]
+version = {attr = "esp_idf_nvs_partition_gen.__version__"}
+
+[tool.pylint]
+    [tool.pylint.'BASIC']
+        variable-rgx = "[a-z_][a-z0-9_]{1,30}$" # Variable names must start with a lowercase letter or underscore, followed by any combination of lowercase letters, numbers, or underscores, with a total length of 2 to 30 characters.
+
+    [tool.pylint.'MESSAGES CONTROL']
+        disable = [
+            "duplicate-code",               # R0801: Similar lines in %s files
+            "fixme",                        # W0511: Used when TODO/FIXME is encountered
+            "import-error",                 # E0401: Used when pylint has been unable to import a module
+            "import-outside-toplevel",      # E0402: Imports should usually be on top of the module
+            "missing-class-docstring",      # C0115: Missing class docstring
+            "missing-function-docstring",   # C0116: Missing function or method docstring
+            "missing-module-docstring",     # C0114: Missing module docstring
+            "no-name-in-module",            # W0611: Used when a name cannot be found in a module
+            "too-few-public-methods",       # R0903: Too few public methods of class
+            "too-many-branches",            # R0912: Too many branches
+            "too-many-locals",              # R0914: Too many local variables
+            "too-many-return-statements",   # R0911: Too many return statements
+            "too-many-statements",          # R0915: Too many statements
+            "ungrouped-imports",            # C0412: Imports should be grouped by packages
+            "pointless-string-statement",   # W0105: String statement has no effect
+            "unused-variable",              # W0612: Unused variable %r
+            "unused-argument",              # W0613: Unused argument %r
+            "too-many-arguments",           # R0913: Too many arguments
+            "too-many-instance-attributes", # R0902: Too many instance attributes
+            "too-many-lines",               # C0302: Too many lines in module
+        ]
+
+    [tool.pylint.'FORMAT']
+        max-line-length = 160
+
+[tool.ruff]
+    line-length    = 120
+    select         = ['E', 'F', 'W']
+    target-version = "py38"
+
+[tool.mypy]
+    disallow_incomplete_defs = false # Disallows defining functions with incomplete type annotations
+    disallow_untyped_defs    = false # Disallows defining functions without type annotations or with incomplete type annotations
+    ignore_missing_imports   = true  # Suppress error messages about imports that cannot be resolved
+    python_version           = "3.9" # Specifies the Python version used to parse and check the target program
+    warn_no_return           = true  # Shows errors for missing return statements on some execution paths
+    warn_return_any          = true  # Shows a warning when returning a value with type Any from a function declared with a non- Any return type
