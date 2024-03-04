@@ -228,7 +228,15 @@ class Page(object):
         struct.pack_into('<I', entry_struct, 4, crc & 0xFFFFFFFF)
         return entry_struct
 
-    def write_varlen_binary_data(self, entry_struct, ns_index, key, data, data_size, total_entry_count, encoding, nvs_obj):
+    def write_varlen_binary_data(self, 
+                                entry_struct, 
+                                ns_index, 
+                                key, 
+                                data, 
+                                data_size, 
+                                total_entry_count, 
+                                encoding, 
+                                nvs_obj):
         chunk_start = 0
         chunk_count = 0
         chunk_index = Page.CHUNK_ANY
@@ -506,7 +514,8 @@ class NVS(object):
         version = self.version
         # Update available size as each page is created
         if self.size == 0:
-            raise InsufficientSizeError('Error: Size parameter is less than the size of data in csv.Please increase size.')
+            raise InsufficientSizeError(
+                'Error: Size parameter is less than the size of data in csv.Please increase size.')
         if not is_rsrv_page:
             self.size = self.size - Page.PAGE_PARAMS['max_size']
         self.page_num += 1
@@ -605,7 +614,8 @@ class InsufficientSizeError(RuntimeError):
 def nvs_open(result_obj, input_size, version=None, is_encrypt=False, key=None):
     """ Wrapper to create and NVS class object. This object can later be used to set key-value pairs
 
-    :param result_obj: File/Stream object to dump resultant binary. If data is to be dumped into memory, one way is to use BytesIO object
+    :param result_obj: File/Stream object to dump resultant binary. 
+                        If data is to be dumped into memory, one way is to use BytesIO object
     :param input_size: Size of Partition
     :return: NVS class instance
     """
@@ -618,7 +628,8 @@ def write_entry(nvs_instance, key, datatype, encoding, value):
     :param nvs_instance: Instance of an NVS class returned by nvs_open()
     :param key: Key of the data
     :param datatype: Data type. Valid values are "file", "data" and "namespace"
-    :param encoding: Data encoding. Valid values are "u8", "i8", "u16", "i16", "u32", "i32", "u64", "i64", "string", "binary", "hex2bin" and "base64"
+    :param encoding: Data encoding. Valid values are "u8", "i8", "u16", "i16", "u32", "i32", "u64", "i64", 
+                        "string", "binary", "hex2bin" and "base64"
     :param value: Data value in ascii encoded string format for "data" datatype and filepath for "file" datatype
     :return: None
     """
@@ -887,7 +898,7 @@ def generate_key(args):
 
         encr_key_bytes = e_key + t_key
         key_len = len(encr_key_bytes)
-        key = f"{int.from_bytes(encr_key_bytes, 'big'):x}"
+        key = encr_key_bytes.hex()
 
         keys_buf[0:key_len] = encr_key_bytes
         crc_data = keys_buf[0:key_len]
@@ -970,7 +981,8 @@ def generate(args, is_encr_enabled=False, encr_key=None):
 
 
 def main():
-    parser = argparse.ArgumentParser(description=desc_format('ESP NVS partition generation utility'), formatter_class=argparse.RawTextHelpFormatter)
+    parser = argparse.ArgumentParser(description=desc_format('ESP NVS partition generation utility'), 
+                                    formatter_class=argparse.RawTextHelpFormatter)
     subparser = parser.add_subparsers(title='Commands',
                                       dest='command',
                                       help=desc_format('Run nvs_partition_gen.py {command} -h for additional help'))
@@ -1024,7 +1036,8 @@ def main():
                                 help=desc_format('Path to output encryption keys file'))
     parser_gen_key.add_argument('--outdir',
                                 default=os.getcwd(),
-                                help=desc_format('Output directory to store files created. (Default: current directory)'))
+                                help=desc_format(
+                                    'Output directory to store files created. (Default: current directory)'))
     parser_encr = subparser.add_parser('encrypt',
                                        help=desc_format('Generate NVS encrypted partition'),
                                        formatter_class=argparse.RawTextHelpFormatter)
