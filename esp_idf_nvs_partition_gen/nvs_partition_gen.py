@@ -228,14 +228,14 @@ class Page(object):
         struct.pack_into('<I', entry_struct, 4, crc & 0xFFFFFFFF)
         return entry_struct
 
-    def write_varlen_binary_data(self, 
-                                entry_struct, 
-                                ns_index, 
-                                key, 
-                                data, 
-                                data_size, 
-                                total_entry_count, 
-                                encoding, 
+    def write_varlen_binary_data(self,
+                                entry_struct,
+                                ns_index,
+                                key,
+                                data,
+                                data_size,
+                                total_entry_count,
+                                encoding,
                                 nvs_obj):
         chunk_start = 0
         chunk_count = 0
@@ -477,6 +477,7 @@ class NVS(object):
         self.size = input_size
         self.encrypt = encrypt
         self.encr_key = None
+        self.namespace_count = 0
         self.namespace_idx = 0
         self.page_num = -1
         self.pages = []
@@ -525,12 +526,31 @@ class NVS(object):
         self.cur_page = new_page
         return new_page
 
+    def get_namespace_idx(self):
+        return self.namespace_idx
+
+    def set_namespace_idx_unsafe(self, idx):
+        self.namespace_idx = idx
+
+    def set_namespace_idx(self, idx):
+        if isinstance(idx, int):
+            if idx > 0 and idx < self.namespace_count:
+                self.set_namespace_idx_unsafe(idx)
+            else:
+                raise InputError('Namespace index out of range')
+        else:
+            raise InputError('Namespace index should be an integer')
+
+    def get_namespace_count(self):
+        return self.namespace_count
+
     """
     Write namespace entry and subsequently increase namespace count so that all upcoming entries
     will be mapped to a new namespace.
     """
     def write_namespace(self, key):
-        self.namespace_idx += 1
+        self.namespace_count += 1
+        self.namespace_idx = self.namespace_count
         try:
             self.cur_page.write_primitive_data(key, self.namespace_idx, 'u8', 0,self)
         except PageFullError:
@@ -543,7 +563,7 @@ class NVS(object):
     Function handles PageFullError and creates a new page and re-invokes the function on a new page.
     We don't have to guard re-invocation with try-except since no entry can span multiple pages.
     """
-    def write_entry(self, key, value, encoding):
+    def write_entry(self, key, value, encoding, namespace_idx=None):
         # Encoding-specific handling
         if encoding == 'hex2bin':
             value = value.strip()
@@ -561,18 +581,21 @@ class NVS(object):
         varlen_encodings = {'string', 'binary', 'hex2bin', 'base64'}
         primitive_encodings = {'u8', 'i8', 'u16', 'i16', 'u32', 'i32', 'u64', 'i64'}
 
+        if namespace_idx is None:
+            namespace_idx = self.namespace_count  # Use the latest namespace index
+
         if encoding in varlen_encodings:
             try:
-                self.cur_page.write_varlen_data(key, value, encoding, self.namespace_idx,self)
+                self.cur_page.write_varlen_data(key, value, encoding, namespace_idx, self)
             except PageFullError:
                 new_page = self.create_new_page()
-                new_page.write_varlen_data(key, value, encoding, self.namespace_idx,self)
+                new_page.write_varlen_data(key, value, encoding, namespace_idx, self)
         elif encoding in primitive_encodings:
             try:
-                self.cur_page.write_primitive_data(key, int(value), encoding, self.namespace_idx,self)
+                self.cur_page.write_primitive_data(key, int(value), encoding, namespace_idx, self)
             except PageFullError:
                 new_page = self.create_new_page()
-                new_page.write_primitive_data(key, int(value), encoding, self.namespace_idx,self)
+                new_page.write_primitive_data(key, int(value), encoding, namespace_idx, self)
         else:
             raise InputError('%s: Unsupported encoding' % encoding)
 
@@ -614,7 +637,7 @@ class InsufficientSizeError(RuntimeError):
 def nvs_open(result_obj, input_size, version=None, is_encrypt=False, key=None):
     """ Wrapper to create and NVS class object. This object can later be used to set key-value pairs
 
-    :param result_obj: File/Stream object to dump resultant binary. 
+    :param result_obj: File/Stream object to dump resultant binary.
                         If data is to be dumped into memory, one way is to use BytesIO object
     :param input_size: Size of Partition
     :return: NVS class instance
@@ -622,15 +645,54 @@ def nvs_open(result_obj, input_size, version=None, is_encrypt=False, key=None):
     return NVS(result_obj, input_size, version, encrypt=is_encrypt, key_input=key)
 
 
-def write_entry(nvs_instance, key, datatype, encoding, value):
+def get_namespace_idx(nvs_instance):
+    """ Wrapper to get the currently used namespace index in NVS
+
+    :param nvs_instance: Instance of an NVS class returned by nvs_open()
+    :return int: Currently used namespace index
+    """
+    return nvs_instance.get_namespace_idx()
+
+
+def set_namespace_idx_unsafe(nvs_instance, idx):
+    """ Unsafe wrapper to set namespace index to be used for next entries in NVS - for testing use only
+
+    :param nvs_instance: Instance of an NVS class returned by nvs_open()
+    :param idx: Namespace index to be used for next added entries
+    :return None:
+    """
+    nvs_instance.set_namespace_idx_unsafe(idx)
+
+
+def set_namespace_idx(nvs_instance, idx):
+    """ Wrapper to set namespace index to be used for next added entries in NVS
+
+    :param nvs_instance: Instance of an NVS class returned by nvs_open()
+    :param idx: Namespace index to be used for next added entries
+    :return None:
+    """
+    nvs_instance.set_namespace_idx(idx)
+
+
+def get_namespace_count(nvs_instance):
+    """ Wrapper to get number of namespaces in NVS
+
+    :param nvs_instance: Instance of an NVS class returned by nvs_open()
+    :return int: Number of namespaces
+    """
+    return nvs_instance.get_namespace_count()
+
+
+def write_entry(nvs_instance, key, datatype, encoding, value, namespace_idx=None):
     """ Wrapper to set key-value pair in NVS format
 
     :param nvs_instance: Instance of an NVS class returned by nvs_open()
     :param key: Key of the data
     :param datatype: Data type. Valid values are "file", "data" and "namespace"
-    :param encoding: Data encoding. Valid values are "u8", "i8", "u16", "i16", "u32", "i32", "u64", "i64", 
+    :param encoding: Data encoding. Valid values are "u8", "i8", "u16", "i16", "u32", "i32", "u64", "i64",
                         "string", "binary", "hex2bin" and "base64"
     :param value: Data value in ascii encoded string format for "data" datatype and filepath for "file" datatype
+    :param namespace_idx: Namespace index to be used for this entry
     :return: None
     """
 
@@ -646,7 +708,7 @@ def write_entry(nvs_instance, key, datatype, encoding, value):
     if datatype == 'namespace':
         nvs_instance.write_namespace(key)
     else:
-        nvs_instance.write_entry(key, value, encoding)
+        nvs_instance.write_entry(key, value, encoding, namespace_idx)
 
 
 def nvs_close(nvs_instance):
@@ -981,7 +1043,7 @@ def generate(args, is_encr_enabled=False, encr_key=None):
 
 
 def main():
-    parser = argparse.ArgumentParser(description=desc_format('ESP NVS partition generation utility'), 
+    parser = argparse.ArgumentParser(description=desc_format('ESP NVS partition generation utility'),
                                     formatter_class=argparse.RawTextHelpFormatter)
     subparser = parser.add_subparsers(title='Commands',
                                       dest='command',
