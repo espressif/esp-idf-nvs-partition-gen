@@ -1011,33 +1011,35 @@ def generate(args, is_encr_enabled=False, encr_key=None):
     if is_encr_enabled and not encr_key:
         encr_key = generate_key(args)
 
-    with open(args.input, 'rt', encoding='utf8') as input_file,\
-            open(args.output, 'wb') as output_file,\
-            nvs_open(output_file, input_size, args.version, is_encrypt=is_encr_enabled, key=encr_key) as nvs_obj:
-        # Comments are skipped
-        reader = csv.DictReader(filter(lambda row: row[0] != '#',input_file), delimiter=',')
+
+    with open(args.output, 'wb') as output_file,\
+        nvs_open(output_file, input_size, args.version, is_encrypt=is_encr_enabled, key=encr_key) as nvs_obj:
         if nvs_obj.version == Page.VERSION1:
             version_set = VERSION1_PRINT
         else:
             version_set = VERSION2_PRINT
         print('\nCreating NVS binary with version:', version_set)
 
-        for row in reader:
-            try:
-                max_key_len = 15
-                if len(row['key']) > max_key_len:
-                    raise InputError('Length of key `%s` should be <= 15 characters.' % row['key'])
-                write_entry(nvs_obj, row['key'], row['type'], row['encoding'], row['value'])
-            except InputError as e:
-                print(e)
-                filedir, filename = os.path.split(args.output)
-                if filename:
-                    print('\nWarning: NVS binary not created...')
-                    os.remove(args.output)
-                if is_dir_new and not filedir == os.getcwd():
-                        print('\nWarning: Output dir not created...')
-                        os.rmdir(filedir)
-                sys.exit(-2)
+        for i in args.input:
+            with open(i, 'rt', encoding='utf8') as input_file:
+                # Comments are skipped
+                reader = csv.DictReader(filter(lambda row: row[0] != '#',input_file), delimiter=',')
+                for row in reader:
+                    try:
+                        max_key_len = 15
+                        if len(row['key']) > max_key_len:
+                            raise InputError('Length of key `%s` should be <= 15 characters.' % row['key'])
+                        write_entry(nvs_obj, row['key'], row['type'], row['encoding'], row['value'])
+                    except InputError as e:
+                        print(e)
+                        filedir, filename = os.path.split(args.output)
+                        if filename:
+                            print('\nWarning: NVS binary not created...')
+                            os.remove(args.output)
+                        if is_dir_new and not filedir == os.getcwd():
+                            print('\nWarning: Output dir not created...')
+                            os.rmdir(filedir)
+                        sys.exit(-2)
 
     print('\nCreated NVS binary: ===>', args.output)
 
@@ -1055,7 +1057,8 @@ def main():
     parser_gen.set_defaults(func=generate)
     parser_gen.add_argument('input',
                             default=None,
-                            help=desc_format('Path to CSV file to parse'))
+                            nargs='+',
+                            help=desc_format('Path to CSV file(s) to parse'))
     parser_gen.add_argument('output',
                             default=None,
                             help=desc_format('Path to output NVS binary file'))
