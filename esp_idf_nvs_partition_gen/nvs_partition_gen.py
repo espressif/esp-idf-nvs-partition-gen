@@ -13,7 +13,6 @@ import binascii
 import codecs
 import csv
 import datetime
-import distutils.dir_util
 import os
 import random
 import struct
@@ -21,6 +20,7 @@ import sys
 import textwrap
 import zlib
 from io import open
+from pathlib import Path
 
 
 from cryptography.hazmat.backends import default_backend
@@ -761,12 +761,18 @@ def set_target_filepath(outdir, filepath):
 
     # Create dir if does not exist
     if not (os.path.isdir(outdir)):
-        distutils.dir_util.mkpath(outdir)
+        try:
+            Path(outdir).mkdir(parents=True, exist_ok=True)
+        except FileExistsError:
+            sys.exit("Error: outdir `%s` path already exists and it's not a directory." % (outdir))
 
     filedir, filename = os.path.split(filepath)
     filedir = os.path.join(outdir,filedir,'')
     if filedir and not os.path.isdir(filedir):
-        distutils.dir_util.mkpath(filedir)
+        try:
+            Path(filedir).mkdir(parents=True, exist_ok=True)
+        except FileExistsError:
+            sys.exit("Error: filedir `%s` path already exists and it's not a directory." % (filedir))
 
     if os.path.isabs(filepath):
         if not outdir == os.getcwd():
@@ -917,7 +923,10 @@ def generate_key(args):
     keys_outdir = os.path.join(args.outdir,keys_dir, '')
     # Create keys/ dir in <outdir> if does not exist
     if not (os.path.isdir(keys_outdir)):
-        distutils.dir_util.mkpath(keys_outdir)
+        try:
+            Path(keys_outdir).mkdir(parents=True, exist_ok=True)
+        except FileExistsError:
+            sys.exit("Error: keys_outdir `%s` path already exists and it's not a directory." % (keys_outdir))
     keys_outdir, output_keyfile = set_target_filepath(keys_outdir, args.keyfile)
 
     keys_buf = bytearray(b'\xff') * page_max_size
