@@ -477,6 +477,7 @@ class NVS(object):
         self.size = input_size
         self.encrypt = encrypt
         self.encr_key = None
+        self.written_namespaces = {}
         self.namespace_count = 0
         self.namespace_idx = 0
         self.page_num = -1
@@ -534,7 +535,7 @@ class NVS(object):
 
     def set_namespace_idx(self, idx):
         if isinstance(idx, int):
-            if idx > 0 and idx < self.namespace_count:
+            if idx > 0 and idx <= self.namespace_count:
                 self.set_namespace_idx_unsafe(idx)
             else:
                 raise InputError('Namespace index out of range')
@@ -549,13 +550,18 @@ class NVS(object):
     will be mapped to a new namespace.
     """
     def write_namespace(self, key):
-        self.namespace_count += 1
-        self.namespace_idx = self.namespace_count
-        try:
-            self.cur_page.write_primitive_data(key, self.namespace_idx, 'u8', 0,self)
-        except PageFullError:
-            new_page = self.create_new_page()
-            new_page.write_primitive_data(key, self.namespace_idx, 'u8', 0,self)
+        idx = self.written_namespaces.get(key)
+        if (idx):
+            self.namespace_idx = idx
+        else:
+            self.namespace_count += 1
+            self.namespace_idx = self.namespace_count
+            try:
+                self.cur_page.write_primitive_data(key, self.namespace_idx, 'u8', 0,self)
+            except PageFullError:
+                new_page = self.create_new_page()
+                new_page.write_primitive_data(key, self.namespace_idx, 'u8', 0,self)
+            self.written_namespaces[key] = self.namespace_idx
 
     """
     Write key-value pair. Function accepts value in the form of ascii character and converts
