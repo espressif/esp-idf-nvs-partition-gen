@@ -1176,8 +1176,11 @@ def main():
                              help=desc_format('Output directory to store files created. (Default: current directory)'))
     args = parser.parse_args()
 
-    args.func(args)
-
+    if len(sys.argv) <= 1:
+        parser.print_help()
+        sys.exit(1)
+    else:
+        args.func(args)
 
 if __name__ == '__main__':
     main()
