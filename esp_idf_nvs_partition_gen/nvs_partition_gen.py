@@ -545,9 +545,20 @@ class NVS(object):
     def get_namespace_count(self):
         return self.namespace_count
 
+    """Similar to `write_namespace` but ignores if the namespace was already used, so duplicates are possible"""
+    def write_namespace_unsafe(self, key):
+        self.namespace_count += 1
+        self.namespace_idx = self.namespace_count
+        try:
+            self.cur_page.write_primitive_data(key, self.namespace_idx, 'u8', 0,self)
+        except PageFullError:
+            new_page = self.create_new_page()
+            new_page.write_primitive_data(key, self.namespace_idx, 'u8', 0,self)
+
     """
     Write namespace entry and subsequently increase namespace count so that all upcoming entries
-    will be mapped to a new namespace.
+    will be mapped to a new namespace. If the namespace was already used, then only the used index is updated
+    and no new namespace entry is written.
     """
     def write_namespace(self, key):
         idx = self.written_namespaces.get(key)
