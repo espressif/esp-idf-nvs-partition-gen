@@ -1135,6 +1135,7 @@ def main():
     parser_encr.set_defaults(func=encrypt)
     parser_encr.add_argument('input',
                              default=None,
+                             nargs='+',
                              help=desc_format('Path to CSV file to parse'))
     parser_encr.add_argument('output',
                              default=None,
