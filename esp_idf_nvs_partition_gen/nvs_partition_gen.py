@@ -1037,6 +1037,7 @@ def generate(args, is_encr_enabled=False, encr_key=None):
     if is_encr_enabled and not encr_key:
         encr_key = generate_key(args)
 
+    input_files = args.input if type(args.input) == list else [args.input]
 
     with open(args.output, 'wb') as output_file,\
         nvs_open(output_file, input_size, args.version, is_encrypt=is_encr_enabled, key=encr_key) as nvs_obj:
@@ -1046,7 +1047,7 @@ def generate(args, is_encr_enabled=False, encr_key=None):
             version_set = VERSION2_PRINT
         print('\nCreating NVS binary with version:', version_set)
 
-        for i in args.input:
+        for i in input_files:
             with open(i, 'rt', encoding='utf8') as input_file:
                 # Comments are skipped
                 reader = csv.DictReader(filter(lambda row: row[0] != '#',input_file), delimiter=',')
@@ -1135,7 +1136,8 @@ def main():
     parser_encr.set_defaults(func=encrypt)
     parser_encr.add_argument('input',
                              default=None,
-                             help=desc_format('Path to CSV file to parse'))
+                             nargs='+',
+                             help=desc_format('Path to CSV file(s) to parse'))
     parser_encr.add_argument('output',
                              default=None,
                              help=desc_format('Path to output NVS binary file'))
