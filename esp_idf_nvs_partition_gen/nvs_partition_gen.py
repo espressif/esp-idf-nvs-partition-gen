@@ -201,7 +201,7 @@ class Page(object):
 
         return encr_data_to_write
 
-    def write_entry_to_buf(self, data, entrycount,nvs_obj):
+    def write_entry_to_buf(self, data, entrycount, nvs_obj):
         encr_data = bytearray()
 
         if nvs_obj.encrypt:
@@ -496,18 +496,18 @@ class NVS(object):
             # Create pages for remaining available size
             while True:
                 try:
-                    self.create_new_page()
+                    self.create_new_page(is_empty_page=True) # Creating empty pages so the last used page stays Active
                 except InsufficientSizeError:
                     self.size = None
                     # Creating the last reserved page
-                    self.create_new_page(is_rsrv_page=True)
+                    self.create_new_page(is_rsrv_page=True, is_empty_page=True)
                     break
             result = self.get_binary_data()
             self.fout.write(result)
 
-    def create_new_page(self, version=None, is_rsrv_page=False):
-        # Set previous page state to FULL before creating new page
-        if self.pages:
+    def create_new_page(self, version=None, is_rsrv_page=False, is_empty_page=False):
+        # Set previous page state to FULL before creating new page (if not creating empty pages)
+        if self.pages and not is_empty_page:
             curr_page_state = struct.unpack('<I', self.cur_page.page_buf[0:4])[0]
             if curr_page_state == Page.ACTIVE:
                 page_state_full_seq = Page.FULL
@@ -517,12 +517,16 @@ class NVS(object):
         # Update available size as each page is created
         if self.size == 0:
             raise InsufficientSizeError(
-                'Error: Size parameter is less than the size of data in csv.Please increase size.')
+                'Error: Size parameter is less than the size of data in csv. Please increase the size.')
         if not is_rsrv_page:
             self.size = self.size - Page.PAGE_PARAMS['max_size']
         self.page_num += 1
         # Set version for each page and page header
-        new_page = Page(self.page_num, version, is_rsrv_page)
+        if is_empty_page:
+            # Passing True here to create an empty page (to not init bitmap array and header)
+            new_page = Page(self.page_num, version, True)
+        else:
+            new_page = Page(self.page_num, version, is_rsrv_page)
         self.pages.append(new_page)
         self.cur_page = new_page
         return new_page
@@ -550,10 +554,10 @@ class NVS(object):
         self.namespace_count += 1
         self.namespace_idx = self.namespace_count
         try:
-            self.cur_page.write_primitive_data(key, self.namespace_idx, 'u8', 0,self)
+            self.cur_page.write_primitive_data(key, self.namespace_idx, 'u8', 0, self)
         except PageFullError:
             new_page = self.create_new_page()
-            new_page.write_primitive_data(key, self.namespace_idx, 'u8', 0,self)
+            new_page.write_primitive_data(key, self.namespace_idx, 'u8', 0, self)
 
     """
     Write namespace entry and subsequently increase namespace count so that all upcoming entries
@@ -565,13 +569,7 @@ class NVS(object):
         if (idx):
             self.namespace_idx = idx
         else:
-            self.namespace_count += 1
-            self.namespace_idx = self.namespace_count
-            try:
-                self.cur_page.write_primitive_data(key, self.namespace_idx, 'u8', 0,self)
-            except PageFullError:
-                new_page = self.create_new_page()
-                new_page.write_primitive_data(key, self.namespace_idx, 'u8', 0,self)
+            self.write_namespace_unsafe(key)
             self.written_namespaces[key] = self.namespace_idx
 
     """
