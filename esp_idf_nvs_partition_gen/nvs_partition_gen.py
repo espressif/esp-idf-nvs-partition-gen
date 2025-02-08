@@ -473,7 +473,7 @@ Binary can later be flashed onto device via a flashing utility.
 
 
 class NVS(object):
-    def __init__(self, fout, input_size, version, encrypt=False, key_input=None):
+    def __init__(self, fout, input_size, version, encrypt=False, key_input=None, read_only=False):
         self.size = input_size
         self.encrypt = encrypt
         self.encr_key = None
@@ -486,6 +486,7 @@ class NVS(object):
         self.fout = fout
         if self.encrypt:
             self.encr_key = key_input
+        self.read_only = read_only
         self.cur_page = self.create_new_page(version)
 
     def __enter__(self):
@@ -494,14 +495,16 @@ class NVS(object):
     def __exit__(self, exc_type, exc_value, traceback):
         if exc_type is None and exc_value is None:
             # Create pages for remaining available size
-            while True:
-                try:
-                    self.create_new_page(is_empty_page=True) # Creating empty pages so the last used page stays Active
-                except InsufficientSizeError:
-                    self.size = None
-                    # Creating the last reserved page
-                    self.create_new_page(is_rsrv_page=True, is_empty_page=True)
-                    break
+            if not self.read_only:
+                while True:
+                    try:
+                        # Creating empty pages so the last used page stays Active
+                        self.create_new_page(is_empty_page=True)
+                    except InsufficientSizeError:
+                        self.size = None
+                        # Creating the last reserved page
+                        self.create_new_page(is_rsrv_page=True, is_empty_page=True)
+                        break
             result = self.get_binary_data()
             self.fout.write(result)
 
@@ -649,7 +652,7 @@ class InsufficientSizeError(RuntimeError):
         super(InsufficientSizeError, self).__init__(e)
 
 
-def nvs_open(result_obj, input_size, version=None, is_encrypt=False, key=None):
+def nvs_open(result_obj, input_size, version=None, is_encrypt=False, key=None, read_only=False):
     """ Wrapper to create and NVS class object. This object can later be used to set key-value pairs
 
     :param result_obj: File/Stream object to dump resultant binary.
@@ -657,7 +660,7 @@ def nvs_open(result_obj, input_size, version=None, is_encrypt=False, key=None):
     :param input_size: Size of Partition
     :return: NVS class instance
     """
-    return NVS(result_obj, input_size, version, encrypt=is_encrypt, key_input=key)
+    return NVS(result_obj, input_size, version, encrypt=is_encrypt, key_input=key, read_only=read_only)
 
 
 def get_namespace_idx(nvs_instance):
@@ -740,6 +743,7 @@ def check_size(size):
     Checks for input partition size
     :param size: Input partition size
     '''
+    read_only = False
     try:
         # Set size
         input_size = int(size, 0)
@@ -747,11 +751,18 @@ def check_size(size):
             sys.exit('Size of partition must be multiple of 4096')
 
         # Update size as a page needs to be reserved of size 4KB
-        input_size = input_size - Page.PAGE_PARAMS['max_size']
+        new_input_size = input_size - Page.PAGE_PARAMS['max_size']
 
-        if input_size < (2 * Page.PAGE_PARAMS['max_size']):
-            sys.exit('Minimum NVS partition size needed is 0x3000 bytes.')
-        return input_size
+        if input_size < Page.PAGE_PARAMS['max_size']:
+            sys.exit('Minimum partition size for read/write NVS is 0x3000 bytes and for read-only NVS is 0x1000 bytes.')
+
+        if new_input_size < (2 * Page.PAGE_PARAMS['max_size']):
+            new_input_size = input_size
+            read_only = True
+            print('''\nMinimum partition size for read/write NVS is 0x3000 bytes. \
+Partitions smaller than this must be flagged as "readonly" in the partition table CSV.''')
+
+        return (new_input_size, read_only)
     except Exception as e:
         print(e)
         sys.exit(0)
@@ -1020,7 +1031,7 @@ def generate(args, is_encr_enabled=False, encr_key=None):
     is_dir_new = False
     bin_ext = '.bin'
 
-    input_size = check_size(args.size)
+    input_size, read_only = check_size(args.size)
     if args.version == 1:
         args.version = Page.VERSION1
     elif args.version == 2:
@@ -1038,7 +1049,8 @@ def generate(args, is_encr_enabled=False, encr_key=None):
     input_files = args.input if type(args.input) == list else [args.input]
 
     with open(args.output, 'wb') as output_file,\
-        nvs_open(output_file, input_size, args.version, is_encrypt=is_encr_enabled, key=encr_key) as nvs_obj:
+        nvs_open(output_file, input_size, args.version,
+            is_encrypt=is_encr_enabled, key=encr_key, read_only=read_only) as nvs_obj:
         if nvs_obj.version == Page.VERSION1:
             version_set = VERSION1_PRINT
         else:
