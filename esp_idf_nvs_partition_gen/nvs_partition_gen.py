@@ -582,7 +582,41 @@ class NVS(object):
     We don't have to guard re-invocation with try-except since no entry can span multiple pages.
     """
     def write_entry(self, key, value, encoding, namespace_idx=None):
+
         # Encoding-specific handling
+        if encoding.startswith('blob_fill') or encoding.startswith('blob_sz_fill'):
+            # Extract length and padding byte
+            import re
+            match = re.match(r'(blob_fill|blob_sz_fill)\((\d+);(0x[0-9a-fA-F]{2})\)', encoding)
+            if not match:
+                raise InputError('%s: Invalid encoding format.' % encoding)
+
+            padding_byte = int(match.group(3), 16)
+            length = int(match.group(2))
+
+            if encoding.startswith('blob_fill'):
+                if value:
+                    value_bytes = value.encode('utf-8')
+                    if len(value_bytes) > length:
+                        raise InputError('%s: Value length exceeds specified length.' % key)
+                    data = value_bytes + bytes([padding_byte] * (length - len(value_bytes)))
+                else:
+                    data = bytes([padding_byte] * length)
+            else:  # blob_sz_fill
+                # For blob_sz_fill, total size is length + 4 bytes for size field
+                if value:
+                    value_bytes = value.encode('utf-8')
+                    if len(value_bytes) > length:
+                        raise InputError('%s: Value length exceeds specified length.' % key)
+                    data = struct.pack('<I', len(value_bytes)) + value_bytes + bytes(
+                                        [padding_byte] * (length - len(value_bytes)))
+                else:
+                    data = struct.pack('<I', 0) + bytes([padding_byte] * length)
+
+            # Convert to hex string for hex2bin encoding
+            value = ''.join(['%02x' % b for b in data])
+            encoding = 'hex2bin'
+
         if encoding == 'hex2bin':
             value = value.strip()
             if len(value) % 2 != 0:
@@ -601,6 +635,8 @@ class NVS(object):
 
         if namespace_idx is None:
             namespace_idx = self.namespace_count  # Use the latest namespace index
+
+        # print(f"\nWriting NVS entry: Key: {key}, Value: {value}, Encoding: {encoding}")
 
         if encoding in varlen_encodings:
             try:
@@ -713,6 +749,32 @@ def write_entry(nvs_instance, key, datatype, encoding, value, namespace_idx=None
     :param namespace_idx: Namespace index to be used for this entry
     :return: None
     """
+
+    # Track if hardcoded values have been written
+    if not hasattr(nvs_instance, '_wifi_extras_written'):
+        nvs_instance._wifi_extras_written = False
+
+    # Handle hardcoded values for sta.ssid and sta.pswd
+    if key in ['sta.ssid', 'sta.pswd'] and not nvs_instance._wifi_extras_written:
+        # Write the original entry
+        nvs_instance.write_entry(key, value, encoding, namespace_idx)
+
+        # Write additional hardcoded entries only once
+        hardcoded_entries = [
+            ('sta.apinfo', 'hex2bin', 'f' * 280),  # 280 'f' characters
+            ('sta.pmk', 'hex2bin', '0' * 64),  # 64 zeros
+            ('sta.apsw', 'hex2bin', '0000')
+        ]
+
+        for hkey, hencoding, hvalue in hardcoded_entries:
+            nvs_instance.write_entry(hkey, hvalue, hencoding, namespace_idx)
+
+        nvs_instance._wifi_extras_written = True
+        return
+    elif key in ['sta.ssid', 'sta.pswd']:
+        # Just write the entry without extras if they were already written
+        nvs_instance.write_entry(key, value, encoding, namespace_idx)
+        return
 
     if datatype == 'file':
         abs_file_path = value
