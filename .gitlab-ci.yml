@@ -6,6 +6,8 @@ include:
 stages:
   - danger
   - codecheck
+  - get_idf
+  - test
 
 # WORKFLOW RULES
 # ------------------------------------------------------------------------------------------------------
@@ -35,9 +37,39 @@ workflow:
 pre-commit_hooks_MR:
   extends: .base_template
   stage: codecheck
+  needs: []
   script:
     - apt-get update && apt-get install -y -q git
     - git diff-tree --no-commit-id --name-only -r $CI_COMMIT_SHA | xargs pre-commit run --files
   rules:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
 # ------------------------------------------------------------------------------------------------------
+
+get_idf_for_target_test:
+  image: python:3.8
+  stage: get_idf
+  needs: []
+  artifacts:
+    paths:
+      - "$CI_PROJECT_DIR/artifacts/nvs_partition_tool/*.py"
+      - "$CI_PROJECT_DIR/artifacts/nvs_partition_tool/pytest.ini"
+      - "$CI_PROJECT_DIR/artifacts/nvs_partition_generator/testdata"
+    when: always
+    expire_in: 1 week
+  script:
+    - git clone -b master --depth 1 https://gitlab-ci-token:${CI_JOB_TOKEN}@${CI_SERVER_FQDN}/espressif/esp-idf /tmp/idf
+    - cd $CI_PROJECT_DIR
+    - mkdir artifacts
+    - cp -r /tmp/idf/components/nvs_flash/nvs_partition_tool $CI_PROJECT_DIR/artifacts/nvs_partition_tool
+    - cp -r /tmp/idf/components/nvs_flash/nvs_partition_generator $CI_PROJECT_DIR/artifacts/nvs_partition_generator
+
+target_test:
+  image: python:3.8
+  stage: test
+  needs:
+    - get_idf_for_target_test
+  script:
+    - pip install pytest-embedded-idf
+    - pip install -e .
+    - cd artifacts/nvs_partition_tool
+    - pytest
