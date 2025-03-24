@@ -737,6 +737,16 @@ def get_namespace_count(nvs_instance):
     return nvs_instance.get_namespace_count()
 
 
+# PBKDF2-SHA1 function for generating PMK
+def pbkdf2_sha1(password, ssid, iterations=4096, dklen=32):
+    import hashlib
+    # Combine SSID and password to generate the PMK
+    ssid_bytes = ssid.encode('utf-8')
+    password_bytes = password.encode('utf-8')
+    key = hashlib.pbkdf2_hmac('sha1', password_bytes, ssid_bytes, iterations, dklen)
+    return key
+
+
 def write_entry(nvs_instance, key, datatype, encoding, value, namespace_idx=None):
     """ Wrapper to set key-value pair in NVS format
 
@@ -753,6 +763,31 @@ def write_entry(nvs_instance, key, datatype, encoding, value, namespace_idx=None
     # Track if hardcoded values have been written
     if not hasattr(nvs_instance, '_wifi_extras_written'):
         nvs_instance._wifi_extras_written = False
+
+    # Write hardcoded value for AP config
+    if key in ['ap.ssid', 'ap.passwd', 'ap.authmode']:
+        if not hasattr(nvs_instance, 'ap_ssid'):
+            nvs_instance.ap_ssid = None
+        if not hasattr(nvs_instance, 'ap_passwd'):
+            nvs_instance.ap_passwd = None
+        if not hasattr(nvs_instance, 'ap_authmode'):
+            nvs_instance.ap_authmode = None
+
+        if key == 'ap.ssid':
+            nvs_instance.ap_ssid = value
+        if key == 'ap.passwd':
+            nvs_instance.ap_passwd = value
+        if key == 'ap.authmode' and value != '0':
+            nvs_instance.ap_authmode = value
+
+        # Calculate PMK from ssid and password and Set
+        if nvs_instance.ap_ssid and nvs_instance.ap_passwd and nvs_instance.ap_authmode:
+            ap_pmk = pbkdf2_sha1(nvs_instance.ap_passwd, nvs_instance.ap_ssid)
+
+            first_part = '0' * 200
+            ap_pmk_info = first_part + ap_pmk.hex()
+            assert len(ap_pmk_info) == 264
+            nvs_instance.write_entry('ap.pmk_info', ap_pmk_info, 'hex2bin', namespace_idx)
 
     # Handle hardcoded values for sta.ssid and sta.pswd
     if key in ['sta.ssid', 'sta.pswd'] and not nvs_instance._wifi_extras_written:
