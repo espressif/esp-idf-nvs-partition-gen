@@ -76,7 +76,7 @@ version = {attr = "esp_idf_nvs_partition_gen.__version__"}
 
 [tool.ruff]
     line-length    = 120
-    select         = ['E', 'F', 'W']
+    lint.select         = ['E', 'F', 'W']
     target-version = "py38"
 
 [tool.mypy]
