@@ -355,7 +355,10 @@ class Page(object):
     """
     def write_varlen_data(self, key, data, encoding, ns_index,nvs_obj):
         # Set size of data
-        datalen = len(data)
+        if encoding == 'string':
+            datalen = len(data.encode()) # Convert to bytes before calculating length (size)
+        else:
+            datalen = len(data)
 
         max_blob_size = Page.PAGE_PARAMS['max_blob_size'][self.version]
         # V2 blob size limit only applies to strings
