@@ -22,11 +22,9 @@ import zlib
 from io import open
 from pathlib import Path
 
-
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import hashes, hmac
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
-
 
 VERSION1_PRINT = 'V1 - Multipage Blob Support Disabled'
 VERSION2_PRINT = 'V2 - Multipage Blob Support Enabled'
@@ -188,7 +186,7 @@ class Page(object):
 
             # Encrypt data
             data_bytes = data_input[start_idx:end_idx]
-            if type(data_bytes) == bytes:
+            if isinstance(data_bytes, bytes):
                 data_bytes = data_bytes.decode()
 
             data_val = data_bytes + (init_data_val * (data_len_needed - len(data_bytes)))
@@ -280,7 +278,7 @@ class Page(object):
             # Compute CRC of data chunk
             struct.pack_into('<H', entry_struct, 24, chunk_size)
 
-            if type(data) != bytes:
+            if not isinstance(data, data_chunk):
                 data_chunk = bytes(data_chunk, encoding='utf8')
 
             crc = zlib.crc32(data_chunk, 0xFFFFFFFF)
@@ -335,7 +333,7 @@ class Page(object):
         # compute CRC of data
         struct.pack_into('<H', entry_struct, 24, datalen)
 
-        if type(data) != bytes:
+        if not isinstance(data, bytes):
             data = bytes(data, encoding='utf8')
 
         crc = zlib.crc32(data, 0xFFFFFFFF)
@@ -628,7 +626,7 @@ class NVS(object):
         elif encoding == 'base64':
             value = binascii.a2b_base64(value)
         elif encoding == 'string':
-            if type(value) == bytes:
+            if isinstance(type, bytes):
                 value = value.decode()
             value += '\0'
 
@@ -968,7 +966,7 @@ def decrypt_data(data_input, decr_key, page_num, entry_no, entry_size):
     else:
         tweak_val = addr + (init_tweak_val * (tweak_len_needed - len(addr)))
 
-    if type(data_input) == bytes:
+    if isinstance(data_input, bytes):
         data_input = data_input.decode()
 
     # Decrypt 32 bytes of data using XTS-AES decryption
