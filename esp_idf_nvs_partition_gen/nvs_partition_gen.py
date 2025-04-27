@@ -1184,6 +1184,7 @@ def generate(args, is_encr_enabled=False, encr_key=None):
 def main():
     parser = argparse.ArgumentParser(description=desc_format('ESP NVS partition generation utility'),
                                     formatter_class=argparse.RawTextHelpFormatter)
+    parser.set_defaults(func=lambda _: parser.print_help())
     subparser = parser.add_subparsers(title='Commands',
                                       dest='command',
                                       help=desc_format('Run nvs_partition_gen.py {command} -h for additional help'))
