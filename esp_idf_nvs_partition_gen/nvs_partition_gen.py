@@ -428,30 +428,34 @@ class Page(object):
         entry_struct[8:24] = key_array
         entry_struct[8:8 + len(key)] = key.encode()
 
-        if encoding == 'u8':
-            entry_struct[1] = Page.U8
-            struct.pack_into('<B', entry_struct, 24, data)
-        elif encoding == 'i8':
-            entry_struct[1] = Page.I8
-            struct.pack_into('<b', entry_struct, 24, data)
-        elif encoding == 'u16':
-            entry_struct[1] = Page.U16
-            struct.pack_into('<H', entry_struct, 24, data)
-        elif encoding == 'i16':
-            entry_struct[1] = Page.I16
-            struct.pack_into('<h', entry_struct, 24, data)
-        elif encoding == 'u32':
-            entry_struct[1] = Page.U32
-            struct.pack_into('<I', entry_struct, 24, data)
-        elif encoding == 'i32':
-            entry_struct[1] = Page.I32
-            struct.pack_into('<i', entry_struct, 24, data)
-        elif encoding == 'u64':
-            entry_struct[1] = Page.U64
-            struct.pack_into('<Q', entry_struct, 24, data)
-        elif encoding == 'i64':
-            entry_struct[1] = Page.I64
-            struct.pack_into('<q', entry_struct, 24, data)
+        try:
+            if encoding == 'u8':
+                entry_struct[1] = Page.U8
+                struct.pack_into('<B', entry_struct, 24, data)
+            elif encoding == 'i8':
+                entry_struct[1] = Page.I8
+                struct.pack_into('<b', entry_struct, 24, data)
+            elif encoding == 'u16':
+                entry_struct[1] = Page.U16
+                struct.pack_into('<H', entry_struct, 24, data)
+            elif encoding == 'i16':
+                entry_struct[1] = Page.I16
+                struct.pack_into('<h', entry_struct, 24, data)
+            elif encoding == 'u32':
+                entry_struct[1] = Page.U32
+                struct.pack_into('<I', entry_struct, 24, data)
+            elif encoding == 'i32':
+                entry_struct[1] = Page.I32
+                struct.pack_into('<i', entry_struct, 24, data)
+            elif encoding == 'u64':
+                entry_struct[1] = Page.U64
+                struct.pack_into('<Q', entry_struct, 24, data)
+            elif encoding == 'i64':
+                entry_struct[1] = Page.I64
+                struct.pack_into('<q', entry_struct, 24, data)
+        except struct.error as e:
+            print(f"Packing error for '{encoding}' key '{key}' = '{data}': {e}")
+            raise
 
         # Compute CRC
         crc_data = bytearray(b'28')
