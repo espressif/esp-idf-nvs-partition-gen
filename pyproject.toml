@@ -29,7 +29,10 @@ classifiers = [
     'Operating System :: MacOS :: MacOS X',
 ]
 dynamic = ['version']
-dependencies = ['cryptography']
+dependencies = [
+    'cryptography',
+    'esp-pylib[cli]',
+]
 
 [project.urls]
 Homepage = "https://github.com/espressif/esp-idf-nvs-partition-gen"

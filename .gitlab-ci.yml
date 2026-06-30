@@ -22,7 +22,7 @@ workflow:
 # TEMPLATES
 # ------------------------------------------------------------------------------------------------------
 .base_template:
-  image: python:3.8-bullseye
+  image: python:3.11-bullseye
   tags:
     - build
     - internet
@@ -46,7 +46,7 @@ pre-commit_hooks_MR:
 # ------------------------------------------------------------------------------------------------------
 
 get_idf_for_target_test:
-  image: python:3.8
+  image: python:3.11
   stage: get_idf
   needs: []
   artifacts:
@@ -64,7 +64,7 @@ get_idf_for_target_test:
     - cp -r /tmp/idf/components/nvs_flash/nvs_partition_generator $CI_PROJECT_DIR/artifacts/nvs_partition_generator
 
 target_test:
-  image: python:3.8
+  image: python:3.11
   stage: test
   needs:
     - get_idf_for_target_test
