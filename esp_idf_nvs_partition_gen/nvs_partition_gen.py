@@ -7,7 +7,6 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 
-import argparse
 import array
 import binascii
 import codecs
@@ -17,15 +16,18 @@ import os
 import random
 import struct
 import sys
-import textwrap
 import zlib
 from io import open
 from pathlib import Path
-
+from types import SimpleNamespace
+from typing import Any
 
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import hashes, hmac
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+import rich_click as click
+from esp_pylib.cli_options import EspRichGroup, MutuallyExclusiveOption
+from esp_pylib.logger import log
 
 
 VERSION1_PRINT = 'V1 - Multipage Blob Support Disabled'
@@ -40,13 +42,6 @@ def reverse_hexbytes(addr_tmp):
     reversed_bytes = ''.join(reversed(addr))
 
     return reversed_bytes
-
-
-def desc_format(*args):
-    desc = ''
-    for arg in args:
-        desc += textwrap.fill(replace_whitespace=False, text=arg) + '\n'
-    return desc
 
 
 """ Class for standard NVS page structure """
@@ -454,7 +449,7 @@ class Page(object):
                 entry_struct[1] = Page.I64
                 struct.pack_into('<q', entry_struct, 24, data)
         except struct.error as e:
-            print(f"Packing error for '{encoding}' key '{key}' = '{data}': {e}")
+            log.err(f"Packing error for '{encoding}' key '{key}' = '{data}': {e}")
             raise
 
         # Compute CRC
@@ -682,7 +677,6 @@ class InputError(RuntimeError):
     Represents error on the input
     """
     def __init__(self, e):
-        print('\nError:')
         super(InputError, self).__init__(e)
 
 
@@ -852,23 +846,25 @@ def check_size(size):
         # Set size
         input_size = int(size, 0)
         if input_size % 4096 != 0:
-            sys.exit('Size of partition must be multiple of 4096')
+            log.die('Size of partition must be multiple of 4096')
 
         # Update size as a page needs to be reserved of size 4KB
         new_input_size = input_size - Page.PAGE_PARAMS['max_size']
 
         if input_size < Page.PAGE_PARAMS['max_size']:
-            sys.exit('Minimum partition size for read/write NVS is 0x3000 bytes and for read-only NVS is 0x1000 bytes.')
+            log.die('Minimum partition size for read/write NVS is 0x3000 bytes and for read-only NVS is 0x1000 bytes.')
 
         if new_input_size < (2 * Page.PAGE_PARAMS['max_size']):
             new_input_size = input_size
             read_only = True
-            print('''\nMinimum partition size for read/write NVS is 0x3000 bytes. \
-Partitions smaller than this must be flagged as "readonly" in the partition table CSV.''')
+            log.warn(
+                'Minimum partition size for read/write NVS is 0x3000 bytes. '
+                'Partitions smaller than this must be flagged as "readonly" in the partition table CSV.'
+            )
 
         return (new_input_size, read_only)
     except Exception as e:
-        print(e)
+        log.print(e)
         sys.exit(0)
 
 
@@ -887,14 +883,14 @@ def set_target_filepath(outdir, filepath):
         if not ext:
             filepath = key_file_name + bin_ext
         elif bin_ext not in ext:
-            sys.exit('Error: `%s`. Only `%s` extension allowed.' % (filepath, bin_ext))
+            log.die('`%s`. Only `%s` extension allowed.' % (filepath, bin_ext))
 
     # Create dir if does not exist
     if not (os.path.isdir(outdir)):
         try:
             Path(outdir).mkdir(parents=True, exist_ok=True)
         except FileExistsError:
-            sys.exit("Error: outdir `%s` path already exists and it's not a directory." % (outdir))
+            log.die("outdir `%s` path already exists and it's not a directory." % (outdir))
 
     filedir, filename = os.path.split(filepath)
     filedir = os.path.join(outdir,filedir,'')
@@ -902,11 +898,11 @@ def set_target_filepath(outdir, filepath):
         try:
             Path(filedir).mkdir(parents=True, exist_ok=True)
         except FileExistsError:
-            sys.exit("Error: filedir `%s` path already exists and it's not a directory." % (filedir))
+            log.die("filedir `%s` path already exists and it's not a directory." % (filedir))
 
     if os.path.isabs(filepath):
         if not outdir == os.getcwd():
-            print('\nWarning: `%s` \n\t==> absolute path given so outdir is ignored for this file.' % filepath)
+            log.warn('`%s` ==> absolute path given so outdir is ignored for this file.' % filepath)
         # Set to empty as outdir is ignored here
         outdir = ''
 
@@ -926,17 +922,17 @@ def encrypt(args):
 
     check_size(args.size)
     if (args.keygen is False) and (not args.inputkey):
-        sys.exit('Error. --keygen or --inputkey argument needed.')
+        log.die('--keygen or --inputkey argument needed.')
     elif args.keygen and args.inputkey:
-        sys.exit('Error. --keygen and --inputkey both are not allowed.')
+        log.die('--keygen and --inputkey both are not allowed.')
     elif not args.keygen and args.keyfile:
-        print('\nWarning:','--inputkey argument is given. --keyfile argument will be ignored...')
+        log.warn('--inputkey argument is given. --keyfile argument will be ignored...')
 
     if args.inputkey:
         # Check if key file has .bin extension
         filename, ext = os.path.splitext(args.inputkey)
         if bin_ext not in ext:
-            sys.exit('Error: `%s`. Only `%s` extension allowed.' % (args.inputkey, bin_ext))
+            log.die('`%s`. Only `%s` extension allowed.' % (args.inputkey, bin_ext))
         key = bytearray()
         with open(args.inputkey, 'rb') as key_f:
             key = key_f.read(64)
@@ -1005,7 +1001,7 @@ def decrypt(args):
     for filepath in input_files:
         filename, ext = os.path.splitext(filepath)
         if bin_ext not in ext:
-            sys.exit('Error: `%s`. Only `%s` extension allowed.' % (filepath, bin_ext))
+            log.die('`%s`. Only `%s` extension allowed.' % (filepath, bin_ext))
     with open(args.key,'rb') as decr_key_file:
         decr_key = decr_key_file.read(64)
 
@@ -1033,7 +1029,7 @@ def decrypt(args):
             start_entry_offset += nvs_read_bytes
         output_file.write(output_buf)
 
-    print('\nCreated NVS decrypted binary: ===>', args.output)
+    log.print('\nCreated NVS decrypted binary: ===>', args.output)
 
 
 def generate_key(args):
@@ -1056,7 +1052,7 @@ def generate_key(args):
         try:
             Path(keys_outdir).mkdir(parents=True, exist_ok=True)
         except FileExistsError:
-            sys.exit("Error: keys_outdir `%s` path already exists and it's not a directory." % (keys_outdir))
+            log.die("keys_outdir `%s` path already exists and it's not a directory." % (keys_outdir))
     keys_outdir, output_keyfile = set_target_filepath(keys_outdir, args.keyfile)
 
     keys_buf = bytearray(b'\xff') * page_max_size
@@ -1082,7 +1078,7 @@ def generate_key(args):
                 hmac_key_file.write(hmac_key)
         else:
             if not args.kp_hmac_inputkey:
-                raise RuntimeError('HMAC Key input file (HMAC-based encryption scheme) missing!')
+                log.die('HMAC Key input file (HMAC-based encryption scheme) missing!')
 
             with open(args.kp_hmac_inputkey, 'rb') as input_keys_file:
                 hmac_key = input_keys_file.read()
@@ -1120,7 +1116,7 @@ def generate_key(args):
     with open(output_keyfile, 'wb') as output_keys_file:
         output_keys_file.write(keys_buf)
 
-    print('\nCreated encryption keys: ===> ', output_keyfile)
+    log.print('\nCreated encryption keys: ===> ', output_keyfile)
 
     return key
 
@@ -1144,7 +1140,7 @@ def generate(args, is_encr_enabled=False, encr_key=None):
     # Check if key file has .bin extension
     filename, ext = os.path.splitext(args.output)
     if bin_ext not in ext:
-        sys.exit('Error: `%s`. Only `.bin` extension allowed.' % args.output)
+        log.die('`%s`. Only `.bin` extension allowed.' % args.output)
     args.outdir, args.output = set_target_filepath(args.outdir, args.output)
 
     if is_encr_enabled and not encr_key:
@@ -1159,7 +1155,7 @@ def generate(args, is_encr_enabled=False, encr_key=None):
             version_set = VERSION1_PRINT
         else:
             version_set = VERSION2_PRINT
-        print('\nCreating NVS binary with version:', version_set)
+        log.print('\nCreating NVS binary with version:', version_set)
 
         for i in input_files:
             with open(i, 'rt', encoding='utf8') as input_file:
@@ -1172,151 +1168,180 @@ def generate(args, is_encr_enabled=False, encr_key=None):
                             raise InputError('Length of key `%s` should be <= 15 characters.' % row['key'])
                         write_entry(nvs_obj, row['key'], row['type'], row['encoding'], row['value'])
                     except InputError as e:
-                        print(e)
+                        log.err(str(e))
                         filedir, filename = os.path.split(args.output)
                         if filename:
-                            print('\nWarning: NVS binary not created...')
+                            log.warn('NVS binary not created...')
                             os.remove(args.output)
                         if is_dir_new and not filedir == os.getcwd():
-                            print('\nWarning: Output dir not created...')
+                            log.warn('Output dir not created...')
                             os.rmdir(filedir)
-                        sys.exit(-2)
+                        log.die(str(e), exit_code=-2)
 
-    print('\nCreated NVS binary: ===>', args.output)
+    log.print('\nCreated NVS binary: ===>', args.output)
 
 
-def main():
-    parser = argparse.ArgumentParser(description=desc_format('ESP NVS partition generation utility'),
-                                    formatter_class=argparse.RawTextHelpFormatter)
-    subparser = parser.add_subparsers(title='Commands',
-                                      dest='command',
-                                      help=desc_format('Run nvs_partition_gen.py {command} -h for additional help'))
+def _version_option():  # type: () -> Any
+    return click.option(
+        '--version',
+        type=click.Choice(['1', '2'], case_sensitive=False),
+        default='2',
+        show_default=True,
+        help=(
+            'Set multipage blob version. '
+            'Version 1 - Multipage blob support disabled. '
+            'Version 2 - Multipage blob support enabled.'
+        ),
+    )
 
-    parser_gen = subparser.add_parser('generate',
-                                      help=desc_format('Generate NVS partition'),
-                                      formatter_class=argparse.RawTextHelpFormatter)
-    parser_gen.set_defaults(func=generate)
-    parser_gen.add_argument('input',
-                            default=None,
-                            nargs='+',
-                            help=desc_format('Path to CSV file(s) to parse'))
-    parser_gen.add_argument('output',
-                            default=None,
-                            help=desc_format('Path to output NVS binary file'))
-    parser_gen.add_argument('size',
-                            default=None,
-                            help=desc_format('Size of NVS partition in bytes (must be multiple of 4096)'))
-    parser_gen.add_argument('--version',
-                            choices=[1,2],
-                            default=2,
-                            type=int,
-                            help=desc_format(
-                                'Set multipage blob version.',
-                                'Version 1 - Multipage blob support disabled.',
-                                'Version 2 - Multipage blob support enabled.',
-                                'Default: Version 2'))
-    parser_gen.add_argument('--outdir',
-                            default=os.getcwd(),
-                            help=desc_format('Output directory to store files created (Default: current directory)'))
-    parser_gen_key = subparser.add_parser('generate-key',
-                                          help=desc_format('Generate keys for encryption'),
-                                          formatter_class=argparse.RawTextHelpFormatter)
-    parser_gen_key.set_defaults(func=generate_key)
-    parser_gen_key.add_argument('--key_protect_hmac',
-                                action='store_true',
-                                help=desc_format(
-                                    'If set, the NVS encryption key protection scheme based on HMAC',
-                                    'peripheral is used; else the default scheme based on Flash Encryption',
-                                    'is used'))
-    parser_gen_key.add_argument('--kp_hmac_keygen',
-                                action='store_true',
-                                help=desc_format('Generate the HMAC key for HMAC-based encryption scheme'))
-    parser_gen_key.add_argument('--kp_hmac_keyfile',
-                                default=None,
-                                help=desc_format('Path to output HMAC key file'))
-    parser_gen_key.add_argument('--kp_hmac_inputkey',
-                                default=None,
-                                help=desc_format('File having the HMAC key for generating the NVS encryption keys'))
-    parser_gen_key.add_argument('--keyfile',
-                                default=None,
-                                help=desc_format('Path to output encryption keys file'))
-    parser_gen_key.add_argument('--outdir',
-                                default=os.getcwd(),
-                                help=desc_format(
-                                    'Output directory to store files created. (Default: current directory)'))
-    parser_encr = subparser.add_parser('encrypt',
-                                       help=desc_format('Generate NVS encrypted partition'),
-                                       formatter_class=argparse.RawTextHelpFormatter)
-    parser_encr.set_defaults(func=encrypt)
-    parser_encr.add_argument('input',
-                             default=None,
-                             nargs='+',
-                             help=desc_format('Path to CSV file(s) to parse'))
-    parser_encr.add_argument('output',
-                             default=None,
-                             help=desc_format('Path to output NVS binary file'))
-    parser_encr.add_argument('size',
-                             default=None,
-                             help=desc_format('Size of NVS partition in bytes (must be multiple of 4096)'))
-    parser_encr.add_argument('--version',
-                             choices=[1,2],
-                             default=2,
-                             type=int,
-                             help=desc_format(
-                                 'Set multipage blob version.',
-                                 'Version 1 - Multipage blob support disabled.',
-                                 'Version 2 - Multipage blob support enabled.',
-                                 'Default: Version 2'))
-    parser_encr.add_argument('--keygen',
-                             action='store_true',
-                             help=desc_format('Generates key for encrypting NVS partition'))
-    parser_encr.add_argument('--keyfile',
-                             default=None,
-                             help=desc_format('Path to output encryption keys file'))
-    parser_encr.add_argument('--inputkey',
-                             default=None,
-                             help=desc_format('File having key for encrypting NVS partition'))
-    parser_encr.add_argument('--outdir',
-                             default=os.getcwd(),
-                             help=desc_format('Output directory to store files created. (Default: current directory)'))
-    parser_encr.add_argument('--key_protect_hmac',
-                             action='store_true',
-                             help=desc_format(
-                                 'If set, the NVS encryption key protection scheme based on HMAC',
-                                 'peripheral is used; else the default scheme based on Flash Encryption',
-                                 'is used'))
-    parser_encr.add_argument('--kp_hmac_keygen',
-                             action='store_true',
-                             help=desc_format('Generate the HMAC key for HMAC-based encryption scheme'))
-    parser_encr.add_argument('--kp_hmac_keyfile',
-                             default=None,
-                             help=desc_format('Path to output HMAC key file'))
-    parser_encr.add_argument('--kp_hmac_inputkey',
-                             default=None,
-                             help=desc_format('File having the HMAC key for generating the NVS encryption keys'))
-    parser_decr = subparser.add_parser('decrypt',
-                                       help=desc_format('Decrypt NVS encrypted partition'),
-                                       formatter_class=argparse.RawTextHelpFormatter)
-    parser_decr.set_defaults(func=decrypt)
-    parser_decr.add_argument('input',
-                             default=None,
-                             help=desc_format('Path to encrypted NVS partition file to parse'))
-    parser_decr.add_argument('key',
-                             default=None,
-                             help=desc_format('Path to file having keys for decryption'))
-    parser_decr.add_argument('output',
-                             default=None,
-                             help='Path to output decrypted binary file')
-    parser_decr.add_argument('--outdir',
-                             default=os.getcwd(),
-                             help=desc_format('Output directory to store files created. (Default: current directory)'))
-    args = parser.parse_args()
 
-    if len(sys.argv) <= 1:
-        parser.print_help()
-        sys.exit(1)
-    else:
-        args.func(args)
+def _outdir_option():  # type: () -> Any
+    return click.option(
+        '--outdir',
+        default=os.getcwd(),
+        show_default=True,
+        help='Output directory to store files created.',
+    )
+
+
+def _key_protect_hmac_options():  # type: () -> Any
+    def decorator(func):  # type: ignore[no-untyped-def]
+        func = click.option(
+            '--key_protect_hmac',
+            is_flag=True,
+            help=(
+                'If set, the NVS encryption key protection scheme based on HMAC peripheral is used; '
+                'else the default scheme based on Flash Encryption is used.'
+            ),
+        )(func)
+        func = click.option(
+            '--kp_hmac_keygen',
+            is_flag=True,
+            help='Generate the HMAC key for HMAC-based encryption scheme',
+        )(func)
+        func = click.option('--kp_hmac_keyfile', default=None, help='Path to output HMAC key file')(func)
+        func = click.option(
+            '--kp_hmac_inputkey',
+            default=None,
+            help='File having the HMAC key for generating the NVS encryption keys',
+        )(func)
+        return func
+
+    return decorator
+
+
+def _build_cli() -> Any:
+    @click.group(
+        cls=EspRichGroup,
+        context_settings={'help_option_names': ['-h', '--help']},
+        help='ESP NVS partition generation utility',
+    )
+    def cli() -> None:
+        pass
+
+    @cli.command('generate', help='Generate NVS partition')
+    @click.argument('input', nargs=-1, required=True)
+    @click.argument('output')
+    @click.argument('size')
+    @_version_option()
+    @_outdir_option()
+    def generate_cmd(input, output, size, version, outdir):  # type: ignore[no-untyped-def]
+        generate(
+            SimpleNamespace(
+                input=list(input),
+                output=output,
+                size=size,
+                version=int(version),
+                outdir=outdir,
+            )
+        )
+
+    @cli.command('generate-key', help='Generate keys for encryption')
+    @click.option('--keyfile', default=None, help='Path to output encryption keys file')
+    @_key_protect_hmac_options()
+    @_outdir_option()
+    def generate_key_cmd(keyfile, key_protect_hmac, kp_hmac_keygen, kp_hmac_keyfile, kp_hmac_inputkey, outdir):  # type: ignore[no-untyped-def]  # noqa: E501
+        generate_key(
+            SimpleNamespace(
+                keyfile=keyfile,
+                key_protect_hmac=key_protect_hmac,
+                kp_hmac_keygen=kp_hmac_keygen,
+                kp_hmac_keyfile=kp_hmac_keyfile,
+                kp_hmac_inputkey=kp_hmac_inputkey,
+                outdir=outdir,
+            )
+        )
+
+    @cli.command('encrypt', help='Generate NVS encrypted partition')
+    @click.argument('input', nargs=-1, required=True)
+    @click.argument('output')
+    @click.argument('size')
+    @_version_option()
+    @click.option(
+        '--keygen',
+        is_flag=True,
+        help='Generates key for encrypting NVS partition',
+        cls=MutuallyExclusiveOption,
+        exclusive_with=['inputkey'],
+    )
+    @click.option(
+        '--inputkey',
+        default=None,
+        help='File having key for encrypting NVS partition',
+        cls=MutuallyExclusiveOption,
+        exclusive_with=['keygen'],
+    )
+    @click.option('--keyfile', default=None, help='Path to output encryption keys file')
+    @_key_protect_hmac_options()
+    @_outdir_option()
+    def encrypt_cmd(  # type: ignore[no-untyped-def]
+        input,
+        output,
+        size,
+        version,
+        keygen,
+        inputkey,
+        keyfile,
+        key_protect_hmac,
+        kp_hmac_keygen,
+        kp_hmac_keyfile,
+        kp_hmac_inputkey,
+        outdir,
+    ):
+        encrypt(
+            SimpleNamespace(
+                input=list(input),
+                output=output,
+                size=size,
+                version=int(version),
+                keygen=keygen,
+                inputkey=inputkey,
+                keyfile=keyfile,
+                key_protect_hmac=key_protect_hmac,
+                kp_hmac_keygen=kp_hmac_keygen,
+                kp_hmac_keyfile=kp_hmac_keyfile,
+                kp_hmac_inputkey=kp_hmac_inputkey,
+                outdir=outdir,
+            )
+        )
+
+    @cli.command('decrypt', help='Decrypt NVS encrypted partition')
+    @click.argument('input')
+    @click.argument('key')
+    @click.argument('output')
+    @_outdir_option()
+    def decrypt_cmd(input, key, output, outdir):  # type: ignore[no-untyped-def]
+        decrypt(SimpleNamespace(input=input, key=key, output=output, outdir=outdir))
+
+    return cli
+
+
+def main() -> None:
+    _build_cli()()
+
 
 if __name__ == '__main__':
+    from esp_pylib.excepthook import install_exception_reporting
+
+    install_exception_reporting()
     main()
