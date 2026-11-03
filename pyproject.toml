@@ -37,6 +37,9 @@ dependencies = [
 [project.urls]
 Homepage = "https://github.com/espressif/esp-idf-nvs-partition-gen"
 
+[project.scripts]
+nvs-partition-gen = "esp_idf_nvs_partition_gen.nvs_partition_gen:main"
+
 [project.optional-dependencies]
 dev = ["pre-commit"]
 
