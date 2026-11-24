@@ -46,6 +46,18 @@ class FloatDoubleEncodingTests(unittest.TestCase):
         with self.assertRaises(InputError):
             self.image([('bad', 'double', 'NaN')])
 
+    def test_out_of_range_is_rejected(self):
+        with self.assertRaises(InputError):
+            self.image([('big', 'float', '1e39')])
+
+    def test_underflow_to_zero_is_rejected(self):
+        with self.assertRaises(InputError):
+            self.image([('tiny', 'float', '1e-50')])
+
+    def test_infinity_is_accepted(self):
+        data = self.image([('inf', 'float', 'inf')])
+        self.assertEqual(struct.unpack_from('<f', self.entry(data, 1), 24)[0], float('inf'))
+
 
 if __name__ == '__main__':
     unittest.main()

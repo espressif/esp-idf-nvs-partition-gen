@@ -664,6 +664,15 @@ class NVS(object):
                     raise InputError('%s: Invalid %s value `%s`.' % (key, encoding, value))
                 if math.isnan(parsed):
                     raise InputError('%s: NaN is not a valid %s value.' % (key, encoding))
+                fmt = '<f' if encoding == 'float' else '<d'
+                try:
+                    stored = struct.unpack(fmt, struct.pack(fmt, parsed))[0]
+                except OverflowError:
+                    raise InputError('%s: Value `%s` is out of range for %s.' % (key, value, encoding))
+                if stored == 0.0 and parsed != 0.0:
+                    raise InputError(
+                        '%s: Value `%s` is too small for %s and would be stored as 0.' % (key, value, encoding)
+                    )
             else:
                 parsed = int(value)
             try:
