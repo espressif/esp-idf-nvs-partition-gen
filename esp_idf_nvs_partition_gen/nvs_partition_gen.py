@@ -12,6 +12,7 @@ import binascii
 import codecs
 import csv
 import datetime
+import math
 import os
 import random
 import struct
@@ -57,6 +58,8 @@ class Page(object):
     I32  = 0x14
     U64  = 0x08
     I64  = 0x18
+    FLOAT = 0x24
+    DOUBLE = 0x28
     SZ   = 0x21
     BLOB = 0x41
     BLOB_DATA = 0x42
@@ -448,6 +451,12 @@ class Page(object):
             elif encoding == 'i64':
                 entry_struct[1] = Page.I64
                 struct.pack_into('<q', entry_struct, 24, data)
+            elif encoding == 'float':
+                entry_struct[1] = Page.FLOAT
+                struct.pack_into('<f', entry_struct, 24, data)
+            elif encoding == 'double':
+                entry_struct[1] = Page.DOUBLE
+                struct.pack_into('<d', entry_struct, 24, data)
         except struct.error as e:
             log.err(f"Packing error for '{encoding}' key '{key}' = '{data}': {e}")
             raise
@@ -633,7 +642,8 @@ class NVS(object):
 
         encoding = encoding.lower()
         varlen_encodings = {'string', 'binary', 'hex2bin', 'base64'}
-        primitive_encodings = {'u8', 'i8', 'u16', 'i16', 'u32', 'i32', 'u64', 'i64'}
+        primitive_encodings = {'u8', 'i8', 'u16', 'i16', 'u32', 'i32', 'u64', 'i64', 'float', 'double'}
+        float_encodings = {'float', 'double'}
 
         if namespace_idx is None:
             namespace_idx = self.namespace_count  # Use the latest namespace index
@@ -647,11 +657,20 @@ class NVS(object):
                 new_page = self.create_new_page()
                 new_page.write_varlen_data(key, value, encoding, namespace_idx, self)
         elif encoding in primitive_encodings:
+            if encoding in float_encodings:
+                try:
+                    parsed = float(value)
+                except (TypeError, ValueError):
+                    raise InputError('%s: Invalid %s value `%s`.' % (key, encoding, value))
+                if math.isnan(parsed):
+                    raise InputError('%s: NaN is not a valid %s value.' % (key, encoding))
+            else:
+                parsed = int(value)
             try:
-                self.cur_page.write_primitive_data(key, int(value), encoding, namespace_idx, self)
+                self.cur_page.write_primitive_data(key, parsed, encoding, namespace_idx, self)
             except PageFullError:
                 new_page = self.create_new_page()
-                new_page.write_primitive_data(key, int(value), encoding, namespace_idx, self)
+                new_page.write_primitive_data(key, parsed, encoding, namespace_idx, self)
         else:
             raise InputError('%s: Unsupported encoding' % encoding)
 
@@ -755,7 +774,7 @@ def write_entry(nvs_instance, key, datatype, encoding, value, namespace_idx=None
     :param key: Key of the data
     :param datatype: Data type. Valid values are "file", "data" and "namespace"
     :param encoding: Data encoding. Valid values are "u8", "i8", "u16", "i16", "u32", "i32", "u64", "i64",
-                        "string", "binary", "hex2bin" and "base64"
+                        "float", "double", "string", "binary", "hex2bin" and "base64"
     :param value: Data value in ascii encoded string format for "data" datatype and filepath for "file" datatype
     :param namespace_idx: Namespace index to be used for this entry
     :return: None
