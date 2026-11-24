@@ -22,7 +22,9 @@ workflow:
 # TEMPLATES
 # ------------------------------------------------------------------------------------------------------
 .base_template:
-  image: python:3.11-bullseye
+  # Current Debian. python:3.11-bullseye can no longer upgrade git: the
+  # bullseye-security package the image asks for is gone from the mirror.
+  image: python:3.11
   tags:
     - build
     - internet
@@ -54,14 +56,16 @@ get_idf_for_target_test:
       - "$CI_PROJECT_DIR/artifacts/nvs_partition_tool/*.py"
       - "$CI_PROJECT_DIR/artifacts/nvs_partition_tool/pytest.ini"
       - "$CI_PROJECT_DIR/artifacts/nvs_partition_generator/testdata"
+      - "$CI_PROJECT_DIR/artifacts/idf/tools/mass_mfg"
     when: always
     expire_in: 1 week
   script:
     - git clone -b master --depth 1 https://gitlab-ci-token:${CI_JOB_TOKEN}@${CI_SERVER_FQDN}/espressif/esp-idf /tmp/idf
     - cd $CI_PROJECT_DIR
-    - mkdir artifacts
+    - mkdir -p artifacts/idf/tools
     - cp -r /tmp/idf/components/nvs_flash/nvs_partition_tool $CI_PROJECT_DIR/artifacts/nvs_partition_tool
     - cp -r /tmp/idf/components/nvs_flash/nvs_partition_generator $CI_PROJECT_DIR/artifacts/nvs_partition_generator
+    - cp -r /tmp/idf/tools/mass_mfg $CI_PROJECT_DIR/artifacts/idf/tools/mass_mfg
 
 target_test:
   image: python:3.11
@@ -72,4 +76,5 @@ target_test:
     - pip install pytest-embedded-idf
     - pip install -e .
     - cd artifacts/nvs_partition_tool
-    - pytest
+    # test_paths_with_spaces.py reads IDF_PATH while the module is imported.
+    - IDF_PATH=$CI_PROJECT_DIR/artifacts/idf pytest
